@@ -157,3 +157,67 @@ def sidebar_session(rows: list[tuple[str, str]]) -> str:
     return "<div class='sa-card' style='padding:.7rem 1rem'>" + "".join(
         f"<div class='sa-side-row'><span>{esc(label)}</span><span>{esc(value)}</span></div>" for label, value in rows
     ) + "</div>"
+# Friendly names for the parts of a saved session transcript.
+TRANSCRIPT_LABELS = {
+    "topic": "You asked",
+    "explanation": "Explanation",
+    "examples": "Examples",
+    "quiz": "Quiz",
+    "answers": "Your answers",
+    "results": "Results",
+    "re_explanation": "Simpler explanation",
+    "recommendation": "What's next",
+}
+# One saved transcript line, drawn as a chat-style bubble.
+def transcript_message(role: str, kind: str, content: str) -> str:
+    label = TRANSCRIPT_LABELS.get(kind, kind.replace("_", " ").title())
+    side = "user" if role == "user" else "assistant"
+    return (
+        f"<div class='sa-msg {side}'>"
+        f"<div class='sa-msg-label'>{esc(label)}</div>"
+        f"<div class='sa-msg-body'>{esc(content)}</div>"
+        "</div>"
+    )
+# The whole saved transcript of a session.
+def transcript(messages: list[Any]) -> str:
+    return "<div class='sa-transcript'>" + "".join(
+        transcript_message(message.role, message.kind, message.content) for message in messages
+    ) + "</div>"
+# A labelled mastery bar, coloured by how solid the concept is.
+def mastery_bar(label: str, score: float, status: str = "") -> str:
+    band = status if status in ("weak", "learning") else ""
+    width = max(0.0, min(100.0, float(score)))
+    return (
+        f"<div class='sa-bar {band}'><span class='lbl'>{esc(label)}</span>"
+        f"<span class='track'><span class='fill' style='width:{width:.0f}%'></span></span>"
+        f"<span class='val'>{width:.0f}%</span></div>"
+    )
+# A row of headline numbers.
+def metrics(items: list[tuple[str, Any, str]]) -> str:
+    cells = []
+    for label, value, sub in items:
+        warn = "warn" if isinstance(value, str) and value.endswith("!") else ""
+        cells.append(
+            f"<div class='sa-metric {warn}'><div class='v'>{esc(str(value).rstrip('!'))}</div>"
+            f"<div class='k'>{esc(label)}</div>"
+            + (f"<div class='sub'>{esc(sub)}</div>" if sub else "")
+            + "</div>"
+        )
+    return "<div class='sa-metrics'>" + "".join(cells) + "</div>"
+# A small status pill for a concept.
+def status_pill(status: str) -> str:
+    return f"<span class='sa-pill {esc(status)}'>{esc(status.replace('_', ' '))}</span>"
+# The source line under an answer drawn from the user's documents.
+def citation(text: str) -> str:
+    return f"<div class='sa-cite'><b>Source:</b> {esc(text)}</div>"
+# One concept waiting to be reviewed. The urgency reads as a coloured word, not a coloured dot.
+def due_row(urgency: str, name: str, detail: str) -> str:
+    band = str(urgency).lower()
+    return (
+        f"<div class='sa-due'><span class='sa-pill {esc(band)}'>{esc(urgency)}</span>"
+        f"<span class='nm'>{esc(name)}</span>"
+        f"<span style='font-size:.8rem;opacity:.7'>{esc(detail)}</span></div>"
+    )
+# How the student's code will be run, stated plainly.
+def sandbox_notice(level: str, message: str) -> str:
+    return f"<div class='sa-sandbox {esc(level)}'>{esc(message)}</div>"

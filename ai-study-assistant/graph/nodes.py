@@ -1,6 +1,7 @@
 # Graph node functions: each does one study step and returns a partial state update.
 from typing import Any
 from langgraph.types import interrupt
+from learning.mastery import CHALLENGE, EASY, HARD, MEDIUM
 from graph.state import (
     FIRST_QUIZ_SIZE,
     MAX_RETRIES,
@@ -40,6 +41,13 @@ from utils.helpers import (
     require_fields,
     results_to_text,
 )
+# How each difficulty should feel, given to the quiz writer alongside the level itself.
+DIFFICULTY_GUIDANCE = {
+    EASY: "Recall and recognition. Check the basic definitions and the single most important idea.",
+    MEDIUM: "Understanding. Ask the student to apply the idea to a straightforward situation.",
+    HARD: "Application. Use scenarios, edge cases and questions that need two steps of reasoning.",
+    CHALLENGE: "Mastery. Mix this concept with related ones and ask which approach fits and why.",
+}
 # Return the clean topic title, or the raw user input if not analysed yet.
 def _topic_title(state: StudyState) -> str:
     return state.get("topic_analysis", {}).get("clean_topic") or state["topic"]
@@ -92,7 +100,11 @@ def generate_quiz(state: StudyState) -> dict[str, Any]:
     is_retry = state.get("retry_count", 0) > 0
     num_questions = RETRY_QUIZ_SIZE if is_retry else FIRST_QUIZ_SIZE
     attempts = state.get("attempts", [])
-    log_step("NODE", f"Generating quiz #{len(attempts) + 1} ({num_questions} questions)")
+    log_step(
+        "NODE",
+        f"Generating quiz #{len(attempts) + 1} ({num_questions} questions, "
+        f"{state.get('quiz_difficulty') or MEDIUM})",
+    )
     if is_retry:
         focus = "The student struggled with these concepts, so test them:\n" + bullet_list(
             state.get("weak_concepts", [])
@@ -104,11 +116,14 @@ def generate_quiz(state: StudyState) -> dict[str, Any]:
     previous_questions = [
         result["question"] for attempt in attempts for result in attempt["results"]
     ]
+    difficulty = state.get("quiz_difficulty") or MEDIUM
     inputs = {
         "topic": _topic_title(state),
         "explanation": explanation_to_text(latest_explanation(state)),
         "num_questions": num_questions,
         "focus": focus,
+        "difficulty": difficulty,
+        "difficulty_guidance": DIFFICULTY_GUIDANCE.get(difficulty, DIFFICULTY_GUIDANCE[MEDIUM]),
         "avoid_questions": bullet_list(previous_questions),
     }
     quiz_keys = [NODE_API_KEYS["generate_quiz"], NODE_API_KEYS["generate_quiz_backup"]]

@@ -83,3 +83,66 @@ class Recommendation(BaseModel):
             "otherwise it can be empty."
         )
     )
+class DocumentAnswer(BaseModel):
+    """An answer grounded in the student's own uploaded material."""
+    answer: str = Field(description="The answer, written for the student, using only the passages given.")
+    used_passages: list[int] = Field(
+        default_factory=list,
+        description="The numbers of the passages actually used, e.g. [1, 3]. Empty if none applied.",
+    )
+    confident: bool = Field(
+        default=True, description="False if the passages do not really answer the question."
+    )
+class DocumentConcepts(BaseModel):
+    """What a document is about."""
+    subject: str = Field(description="The single subject area this document belongs to.")
+    concepts: list[str] = Field(description="3-12 concept names a student would need to learn.")
+    definitions: list[str] = Field(
+        default_factory=list, description="Key definitions, each as 'term: meaning'."
+    )
+    prerequisites: list[str] = Field(
+        default_factory=list, description="Concepts a student should already know."
+    )
+class Flashcard(BaseModel):
+    """One two-sided revision card."""
+    front: str = Field(description="The prompt side: a question or term.")
+    back: str = Field(description="The answer side, one or two sentences.")
+    concept: str = Field(default="", description="The concept this card tests.")
+class FlashcardSet(BaseModel):
+    """A set of revision cards."""
+    cards: list[Flashcard] = Field(description="Between 3 and 10 cards.")
+class CodingProblemSpec(BaseModel):
+    """A generated coding problem with everything needed to solve and grade it."""
+    title: str = Field(description="A short title.")
+    statement: str = Field(description="The problem statement, including what to return.")
+    constraints: str = Field(default="", description="Input sizes and value ranges.")
+    signature: str = Field(description="The exact function signature to implement, e.g. 'def solve(nums: list[int]) -> int:'")
+    function_name: str = Field(description="The function name the tests will call.")
+    examples: list[str] = Field(
+        default_factory=list, description="Worked examples as 'input -> output' lines."
+    )
+    test_inputs: list[str] = Field(
+        description="Python literal argument tuples, e.g. '([1, 2, 3], 2)'. One per test case."
+    )
+    test_outputs: list[str] = Field(
+        description="The expected return value for each test, as a Python literal. Same order and length as test_inputs."
+    )
+    concepts: list[str] = Field(description="The concepts this problem exercises, e.g. ['binary search', 'arrays'].")
+class CodingHint(BaseModel):
+    """One step of progressive help, without giving the answer away early."""
+    hint: str = Field(description="The help at this level only. Never include full working code unless asked for the solution.")
+class CodeReview(BaseModel):
+    """Analysis of a submission that passed its tests."""
+    time_complexity: str = Field(description="Big-O time complexity of the submitted code.")
+    space_complexity: str = Field(description="Big-O auxiliary space of the submitted code.")
+    reasoning: str = Field(description="One or two sentences explaining those complexities from the code.")
+    improvement: str = Field(default="", description="A concrete possible optimisation, or empty if it is already optimal.")
+    edge_cases: list[str] = Field(default_factory=list, description="Edge cases worth checking.")
+class FailureAnalysis(BaseModel):
+    """Why a submission failed, in one line the student can act on."""
+    likely_issue: str = Field(description="The most likely cause, e.g. 'Edge case when the array has one element.'")
+    hint: str = Field(description="A nudge towards the fix, without writing the fix.")
+class StudyPlanTopics(BaseModel):
+    """The topics a subject should be broken into for a study plan."""
+    subject: str = Field(description="The subject, tidied up.")
+    topics: list[str] = Field(description="6-16 topic names in a sensible learning order.")

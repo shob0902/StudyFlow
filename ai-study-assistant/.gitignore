@@ -1,7 +1,12 @@
-# Files git should not track: secrets, Python caches and virtual environments.
+# Files git should not track: secrets, databases, Python caches and virtual environments.
 .env
+*.db
+*.sqlite3
 __pycache__/
 *.pyc
+.pytest_cache/
 .venv/
 venv/
 LEARNING_GUIDE.md
+*.db-shm
+*.db-wal

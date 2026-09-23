@@ -22,7 +22,23 @@ NODE_API_KEYS = {
     "evaluate_answers": "GROQ_API_KEY_6",
     "re_explain_topic": "GROQ_API_KEY_7",
     "recommend_next_topic": "GROQ_API_KEY_8",
+    # The platform features reuse the same eight keys rather than asking for more: each one is
+    # mapped to the node whose load it most resembles.
+    "document_tutor": "GROQ_API_KEY_2",
+    "document_concepts": "GROQ_API_KEY_1",
+    "document_quiz": "GROQ_API_KEY_4",
+    "flashcards": "GROQ_API_KEY_3",
+    "coding_problem": "GROQ_API_KEY_3",
+    "coding_hint": "GROQ_API_KEY_7",
+    "coding_review": "GROQ_API_KEY_6",
+    "study_planner": "GROQ_API_KEY_8",
 }
+# The eight keys the app asks the user to configure. The extra entries above are aliases onto
+# these, so a missing-key check never demands a key that does not exist.
+PRIMARY_NODES = (
+    "understand_topic", "generate_explanation", "generate_examples", "generate_quiz",
+    "generate_quiz_backup", "evaluate_answers", "re_explain_topic", "recommend_next_topic",
+)
 FALLBACK_KEY = "GROQ_API_KEY"
 # Read an environment variable, treating empty values and placeholders as missing.
 def _read_key(key_name: str) -> str | None:
@@ -40,7 +56,8 @@ def get_api_key(key_name: str) -> str:
 def missing_api_keys() -> list[str]:
     if _read_key(FALLBACK_KEY):
         return []
-    return [key_name for key_name in NODE_API_KEYS.values() if not _read_key(key_name)]
+    required = [NODE_API_KEYS[node] for node in PRIMARY_NODES]
+    return [key_name for key_name in required if not _read_key(key_name)]
 # Create and cache one ChatGroq model per API key name.
 @lru_cache(maxsize=None)
 def get_llm(key_name: str = "GROQ_API_KEY_1") -> ChatGroq:
