@@ -4,6 +4,7 @@ import streamlit as st
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 from auth.errors import UnauthorizedError
+from components.flap_loader import show_flap_loader
 from auth.streamlit_auth import AVATAR_KEY, learning_data, render_user_panel, require_login
 from auth.user_context import UserContext, new_thread_id, require_thread_owner
 from db.learning_service import mastery_for_user, record_attempts, record_mistake
@@ -43,6 +44,7 @@ st.set_page_config(
     page_title="StudyFlow · AI Study Assistant", page_icon=":material/school:",
     layout="wide", initial_sidebar_state="expanded",
 )
+show_flap_loader()
 # Build the compiled graph once per server process.
 @st.cache_resource
 def get_graph() -> CompiledStateGraph:

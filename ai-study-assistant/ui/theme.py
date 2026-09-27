@@ -40,7 +40,9 @@ html,body,.stApp,[data-testid="stAppViewContainer"],button,input,textarea,select
  radial-gradient(rgba(109,74,255,.06) 1px,transparent 1px) 0 0/26px 26px,
  var(--bg);background-attachment:fixed;}
 [data-testid="stHeader"]{background:transparent;}
-.block-container,[data-testid="stMainBlockContainer"]{max-width:1200px;padding-top:2.6rem;padding-bottom:4rem;animation:saFadeUp .45s ease both;}
+/* no animation here: any animation on this column traps the full-screen loading board (components/flap_loader.py)
+   inside it, under the sidebar. Cards and heroes keep their own entrance animations. */
+.block-container,[data-testid="stMainBlockContainer"]{max-width:1200px;padding-top:2.6rem;padding-bottom:4rem;}
 [data-testid="stHeading"] h1,[data-testid="stHeading"] h2,[data-testid="stHeading"] h3,[data-testid="stHeading"] h4{color:var(--text);letter-spacing:-.02em;font-weight:700;}
 [data-testid="stHeading"] h2{font-size:1.35rem;}
 [data-testid="stHeading"] h3{font-size:1.08rem;}

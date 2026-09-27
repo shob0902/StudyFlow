@@ -42,7 +42,7 @@ def avatar(name: str, picture: str = "") -> str:
 # The greeting at the top of the dashboard.
 def dashboard_hello(first_name: str, message: str) -> str:
     return (
-        f"<p class='sa-hello'>Welcome back, {esc(first_name)} 👋</p>"
+        f"<p class='sa-hello'>Welcome back, {esc(first_name)}</p>"
         "<p class='sa-hello-sub'>Ready to continue learning?</p>"
         f"<p class='sa-hello-msg'>{esc(message)}</p>"
     )
