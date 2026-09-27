@@ -67,6 +67,44 @@ def test_second_login_reuses_the_same_user(db_file, google_claims):
     first = user_context_for_profile(profile)
     second = user_context_for_profile(profile)
     assert first.user_id == second.user_id
+# A stored user: the database-backed store joins sessions against real users rows.
+def _stored_context(google_id: str = "google-1", email: str = "ada@example.com") -> UserContext:
+    from auth.google_oauth import GoogleProfile
+    return user_context_for_profile(
+        GoogleProfile(google_id=google_id, email=email, name="Ada Lovelace", picture="")
+    )
+# A database session outlives the store object, which is what a server restart looks like.
+def test_database_session_survives_a_new_store(db_file):
+    from auth.session import DatabaseSessionStore
+    user = _stored_context()
+    session = DatabaseSessionStore(ttl_minutes=60).create(user)
+    restored = DatabaseSessionStore(ttl_minutes=60).get(session.session_id)
+    assert restored is not None
+    assert restored.user == user
+    assert restored.expires_at == pytest.approx(session.expires_at)
+# Only a hash of the session id is stored, never the id the cookie carries.
+def test_database_session_id_is_stored_hashed(db_file):
+    from auth.session import DatabaseSessionStore
+    session = DatabaseSessionStore().create(_stored_context())
+    connection = get_connection()
+    try:
+        stored = [row["id_hash"] for row in connection.execute("SELECT id_hash FROM auth_sessions")]
+    finally:
+        connection.close()
+    assert stored and session.session_id not in stored
+# Unknown, revoked and expired database sessions are all refused.
+def test_database_session_is_refused_after_logout_or_expiry(db_file, monkeypatch):
+    from auth.session import DatabaseSessionStore
+    store = DatabaseSessionStore(ttl_minutes=1)
+    assert store.get("made-up") is None
+    revoked = store.create(_stored_context())
+    logout(store, revoked.session_id)
+    assert store.get(revoked.session_id) is None
+    logout(store, revoked.session_id)  # revoking twice is harmless
+    expired = store.create(_stored_context())
+    monkeypatch.setattr(time, "time", lambda: expired.expires_at + 1)
+    assert store.get(expired.session_id) is None
+    assert len(store) == 0
 # Each session carries its own user, so two logins never share identity.
 def test_sessions_do_not_share_identity():
     store = SessionStore()

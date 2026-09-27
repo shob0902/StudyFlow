@@ -4,6 +4,11 @@ langchain-core>=1.0
 langgraph>=1.0
 # Persistent graph checkpoints, so a paused quiz survives a restart.
 langgraph-checkpoint-sqlite>=2.0
+# Hosted Postgres (e.g. Neon) when DATABASE_URL is set: app data, sign-ins and graph checkpoints
+# then survive restarts and redeploys on hosts whose disk is wiped (Render, Railway, HF Spaces).
+psycopg[binary]>=3.2
+psycopg-pool>=3.2
+langgraph-checkpoint-postgres>=2.0
 langchain-groq>=1.1
 streamlit>=1.50
 pydantic>=2.7

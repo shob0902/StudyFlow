@@ -2,11 +2,10 @@
 #
 # st.session_state lives only as long as one browser connection, so a refresh loses it. The
 # opaque session id is therefore also kept in a cookie: the browser hands it back after a
-# refresh, and the server checks it against the in-memory session store as usual.
+# refresh, and the server checks it against the session store as usual.
 #
-# That store is deliberately in memory, which gives exactly the behaviour asked for:
-#   refresh the page  -> cookie is returned, the session is still in the store, you stay in
-#   restart the server -> the store is empty, the cookie means nothing, you sign in again
+# That store is kept in the database, so the cookie keeps working across a server restart or a
+# redeploy until the session expires (AUTH_SESSION_TTL_MINUTES) or the user logs out.
 #
 # The cookie holds the session id and nothing else: no tokens, no profile, no secrets.
 import json

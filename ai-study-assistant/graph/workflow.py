@@ -64,6 +64,19 @@ def sqlite_checkpointer() -> SqliteSaver:
     connection = sqlite3.connect(checkpoint_path(), check_same_thread=False)
     log_step("GRAPH", f"Checkpoints stored in {checkpoint_path()!r}")
     return SqliteSaver(connection)
+# The same, kept in hosted Postgres next to the app's data so it survives a redeploy.
+# setup() creates LangGraph's checkpoint tables on first use and is a no-op afterwards.
+def postgres_checkpointer() -> BaseCheckpointSaver:
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from db.database import postgres_pool
+    saver = PostgresSaver(postgres_pool("checkpoints"))
+    saver.setup()
+    log_step("GRAPH", "Checkpoints stored in Postgres")
+    return saver
+# Postgres when DATABASE_URL is set, otherwise the local SQLite file.
+def default_checkpointer() -> BaseCheckpointSaver:
+    from db.database import using_postgres
+    return postgres_checkpointer() if using_postgres() else sqlite_checkpointer()
 # Create the StateGraph, add nodes and edges, and compile it with a checkpointer.
 def build_workflow(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStateGraph:
     log_step("GRAPH", "Building workflow")
@@ -94,7 +107,7 @@ def build_workflow(checkpointer: BaseCheckpointSaver | None = None) -> CompiledS
     )
     builder.add_edge(RE_EXPLAIN_TOPIC, GENERATE_QUIZ)
     builder.add_edge(RECOMMEND_NEXT_TOPIC, END)
-    return builder.compile(checkpointer=checkpointer or sqlite_checkpointer())
+    return builder.compile(checkpointer=checkpointer or default_checkpointer())
 # Return the Mermaid source for the compiled graph.
 def get_mermaid_diagram(graph: CompiledStateGraph) -> str:
     return graph.get_graph().draw_mermaid()

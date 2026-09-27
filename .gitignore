@@ -1,0 +1,6 @@
+# Repository-wide ignores: the virtual environment and local tool state never belong in git.
+.venv/
+venv/
+.neon
+__pycache__/
+*.pyc

@@ -7,7 +7,7 @@ from auth.config import is_configured, load_config, missing_settings
 from auth.errors import AuthError, AuthConfigError
 from auth.google_oauth import PendingLoginStore, build_authorization_url, raise_for_callback_error
 from auth.service import load_user_learning_data, login_with_google, logout
-from auth.session import SessionStore
+from auth.session import DatabaseSessionStore, SessionStore
 from auth.user_context import UserContext
 from ui.auth_ui import login_page, login_setup_needed, user_badge
 from utils.helpers import StudyAssistantError, log_error, log_step
@@ -61,11 +61,11 @@ USER_SCOPED_KEYS = [
 @st.cache_resource
 def pending_store() -> PendingLoginStore:
     return PendingLoginStore()
-# One store of signed-in sessions per server process.
+# The store of signed-in sessions. It lives in the database, so a restart keeps people signed in.
 @st.cache_resource
 def session_store() -> SessionStore:
     ttl = load_config().session_ttl_minutes if is_configured() else 720
-    return SessionStore(ttl_minutes=ttl)
+    return DatabaseSessionStore(ttl_minutes=ttl)
 # Show an authentication message on the next render and drop the spent consent URL, so retrying works.
 def _set_error(message: str) -> None:
     st.session_state[ERROR_KEY] = message
@@ -117,8 +117,8 @@ def _handle_callback() -> None:
 # The signed-in user for this browser session, or None. Validated server-side on every rerun.
 #
 # A page refresh starts a fresh browser connection with empty session state, so the session id
-# is taken from the cookie instead. It still has to name a live session in the store, which is
-# what makes a server restart require a new sign-in.
+# is taken from the cookie instead. It still has to name a live, unexpired session in the store;
+# the store is in the database, so that holds across a server restart as well.
 def current_user() -> UserContext | None:
     session_id = st.session_state.get(SESSION_ID_KEY)
     from_cookie = False
@@ -130,11 +130,11 @@ def current_user() -> UserContext | None:
     session = session_store().get(session_id)
     if session is None:
         _clear_session_state()
-        # A cookie left over from an earlier run of the server is not an expired visit worth
-        # reporting; it is just stale, so drop it quietly.
+        # A cookie naming a session that is gone (revoked, pruned or from another database) is
+        # not an expired visit worth reporting; it is just stale, so drop it quietly.
         if from_cookie:
             st.session_state[CLEAR_COOKIE_KEY] = True
-            log_step("AUTH", "Ignoring a sign-in cookie from an earlier run of the server")
+            log_step("AUTH", "Ignoring a stale sign-in cookie")
         else:
             _set_error("Your session has expired. Please sign in again.")
         return None

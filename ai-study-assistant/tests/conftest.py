@@ -6,6 +6,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from auth.config import OAuthConfig
 from db.database import connect, init_db
 from db.repository import StudySessionRepository, UserRepository
+# Never let a test touch the real database: db.database loads .env, which may hold the production
+# DATABASE_URL. Tests use throwaway SQLite files; tests/test_postgres.py opts in explicitly with
+# TEST_DATABASE_URL. Set to empty rather than removed, because load_dotenv() never overrides a
+# variable that already exists, so a module imported mid-test cannot bring the real one back.
+@pytest.fixture(autouse=True)
+def _no_production_database(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "")
 # Point the app at a fresh database file for the duration of one test.
 @pytest.fixture
 def db_file(tmp_path, monkeypatch):

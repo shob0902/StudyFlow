@@ -229,9 +229,9 @@ class MessageRepository:
         try:
             with self._connection:
                 self._connection.executemany(
-                    "INSERT OR IGNORE INTO session_messages"
+                    "INSERT INTO session_messages"
                     " (id, study_session_id, position, role, kind, content, created_at)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
                     rows,
                 )
         except sqlite3.Error:

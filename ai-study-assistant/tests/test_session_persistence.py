@@ -1,4 +1,4 @@
-# Staying signed in across a page refresh, and being asked to sign in again after a restart.
+# Staying signed in across a page refresh and a server restart, until logout or expiry.
 from pathlib import Path
 import pytest
 AppTest = pytest.importorskip("streamlit.testing.v1").AppTest
@@ -41,22 +41,22 @@ def test_refresh_restores_the_user_context(monkeypatch, signed_in, db_file):
     assert isinstance(restored, UserContext)
     assert restored.user_id == user.user_id
     assert restored.email == "ada@example.com"
-# Restarting the server empties the in-memory store, so the cookie no longer signs anyone in.
-def test_restarting_the_server_requires_a_new_sign_in(monkeypatch, signed_in, db_file):
+# Restarting the server keeps the user signed in: sessions live in the database, not in memory.
+def test_restarting_the_server_keeps_you_signed_in(monkeypatch, signed_in, db_file):
     from auth.streamlit_auth import session_store
     _user, session = signed_in
     # A restart is a fresh session store, which is what clearing the cached resource simulates.
     session_store.clear()
     app = _open(monkeypatch, cookie=session.session_id)
     assert not app.exception
-    assert "Continue with Google" in _html(app)
-    assert "auth_session_id" not in app.session_state
+    assert "Welcome, Ada" in _html(app)
+    assert app.session_state["auth_session_id"] == session.session_id
 # A stale cookie is removed from the browser, and quietly: it is not an expired visit.
 def test_a_stale_cookie_is_cleared_quietly(monkeypatch, signed_in, db_file):
     import auth.remember as remember
     from auth.streamlit_auth import session_store
     _user, session = signed_in
-    session_store.clear()
+    session_store().revoke(session.session_id)
     cleared = []
     monkeypatch.setattr(remember, "clear_cookie", lambda: cleared.append(True))
     app = _open(monkeypatch, cookie=session.session_id)

@@ -19,7 +19,8 @@ class ConceptRepository:
         try:
             with self._connection:
                 self._connection.execute(
-                    "INSERT OR IGNORE INTO concepts (slug, name, subject, created_at) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO concepts (slug, name, subject, created_at) VALUES (?, ?, ?, ?)"
+                    " ON CONFLICT DO NOTHING",
                     (slug, name, subject, utc_now()),
                 )
         except sqlite3.Error:
