@@ -1,6 +1,7 @@
 # Animated HTML cards rendered with st.html; every LLM-generated string is HTML-escaped first.
 import html
 from typing import Any
+from ui.icons import icon
 # Escape text for safe HTML and keep its line breaks.
 def esc(text: Any) -> str:
     return html.escape(str(text)).replace("\n", "<br>")
@@ -9,19 +10,120 @@ def chips(items: list[str], kind: str = "") -> str:
     return "<div class='sa-chips'>" + "".join(
         f"<span class='sa-chip {kind}'>{esc(item)}</span>" for item in items
     ) + "</div>"
-# Hero text: badge, animated gradient title, tagline and feature chips.
+# Hero text for the AI tutor: badge, gradient title, tagline and the steps of a session.
 def hero_intro() -> str:
     return (
         "<div class='sa-hero'>"
-        "<span class='sa-badge'>LANGCHAIN · LANGGRAPH · GROQ</span>"
-        "<div class='sa-title'>AI Study Assistant</div>"
-        "<p class='sa-sub'>Pick any topic. Learn it, see it in action, test yourself, and level up.</p>"
+        f"<span class='sa-badge'>{icon('sparkles', 13)} AI TUTOR</span>"
+        "<div class='sa-title'>What do you want to master today?</div>"
+        "<p class='sa-sub'>Pick any topic. StudyFlow explains it, shows examples, quizzes you and "
+        "re-teaches whatever you missed.</p>"
         "<div class='sa-chips'>"
-        "<span class='sa-chip'>Learn</span>"
-        "<span class='sa-chip' style='animation-delay:.1s'>Explore</span>"
-        "<span class='sa-chip' style='animation-delay:.2s'>Quiz</span>"
-        "<span class='sa-chip' style='animation-delay:.3s'>Grow</span>"
+        "<span class='sa-chip'>Explain</span><span class='sa-chip'>Examples</span>"
+        "<span class='sa-chip'>Quiz</span><span class='sa-chip'>Adapt</span>"
         "</div></div>"
+    )
+# The StudyFlow wordmark for the top of the sidebar and the login page.
+def brand() -> str:
+    return (
+        "<div class='sa-brand'>"
+        f"<span class='logo'>{icon('book', 20)}</span>"
+        "<div><div class='name'>StudyFlow</div><div class='tag'>AI Study Assistant</div></div>"
+        "</div>"
+    )
+# The title block on the left of the top header.
+def page_title(title: str, subtitle: str) -> str:
+    return f"<h1 class='sa-page-title'>{esc(title)}</h1><div class='sa-page-sub'>{esc(subtitle)}</div>"
+# A round avatar: the inlined picture when there is one, otherwise the first initial.
+def avatar(name: str, picture: str = "") -> str:
+    if picture:
+        return f"<img src='{esc(picture)}' alt=''>"
+    return f"<div class='avatar'>{esc((name or '?')[:1].upper())}</div>"
+# The greeting at the top of the dashboard.
+def dashboard_hello(first_name: str, message: str) -> str:
+    return (
+        f"<p class='sa-hello'>Welcome back, {esc(first_name)} 👋</p>"
+        "<p class='sa-hello-sub'>Ready to continue learning?</p>"
+        f"<p class='sa-hello-msg'>{esc(message)}</p>"
+    )
+# Headline statistic cards: (icon, tone, label, value, description, progress 0-100 or None).
+def stat_cards(items: list[tuple[str, str, str, Any, str, float | None]]) -> str:
+    cells = []
+    for index, (name, tone, label, value, detail, progress) in enumerate(items):
+        bar = (
+            f"<div class='sa-mini'><span style='width:{max(0.0, min(100.0, progress)):.0f}%'></span></div>"
+            if progress is not None else ""
+        )
+        cells.append(
+            f"<div class='sa-stat' style='animation-delay:{index * 0.05:.2f}s'>"
+            f"<div class='top'><span class='ic {tone}'>{icon(name, 16)}</span><span class='l'>{esc(label)}</span></div>"
+            f"<div class='v'>{esc(value)}</div><div class='d'>{esc(detail)}</div>{bar}</div>"
+        )
+    return "<div class='sa-stats'>" + "".join(cells) + "</div>"
+# A section heading with an optional note on the right.
+def section_head(title: str, note: str = "") -> str:
+    side = f"<span>{esc(note)}</span>" if note else ""
+    return f"<div class='sa-section-head'><h3>{esc(title)}</h3>{side}</div>"
+# One recent study session on the dashboard: topic, how it went and when.
+def continue_card(title: str, status: str, score: float | None, when: str) -> str:
+    progress = score if score is not None else 0.0
+    result = f"Score {score:.0f}%" if score is not None else ("In progress" if status == "active" else "Not started")
+    return (
+        "<div class='sa-cont'>"
+        f"<span class='subj'>{icon('book', 12)} {'Finished' if status == 'finished' else 'Study session'}</span>"
+        f"<div class='ttl'>{esc(title)}</div>"
+        f"<div class='track'><span style='width:{max(0.0, min(100.0, progress)):.0f}%'></span></div>"
+        f"<div class='meta'><span>{esc(result)}</span><span>{esc(when)}</span></div>"
+        "</div>"
+    )
+# The text half of the AI assistant card; its buttons are Streamlit widgets below it.
+def ai_card_text() -> str:
+    return (
+        "<div class='sa-ai'>"
+        f"<span class='k'>{icon('sparkles', 16)} AI Study Assistant</span>"
+        "<div class='q'>Need help understanding something?</div>"
+        "<p class='s'>Ask about any topic, get a summary of your notes, or turn them into a quiz.</p>"
+        "</div>"
+    )
+# A day-grouped activity timeline: [(day label, [(icon, tone, text, detail)])].
+def timeline(days: list[tuple[str, list[tuple[str, str, str, str]]]]) -> str:
+    parts = []
+    for label, items in days:
+        parts.append(f"<div class='sa-tl-day'>{esc(label)}</div>")
+        for name, tone, text, detail in items:
+            small = f"<small>{esc(detail)}</small>" if detail else ""
+            parts.append(
+                f"<div class='sa-tl-item'><span class='sa-tl-dot {tone}'>{icon(name, 13)}</span>"
+                f"<div class='sa-tl-text'>{esc(text)}{small}</div></div>"
+            )
+    return "<div class='sa-timeline'>" + "".join(parts) + "</div>"
+# A friendly empty state with an icon, a title and one line of guidance.
+def empty_state(name: str, title: str, message: str) -> str:
+    return (
+        f"<div class='sa-empty'><div class='ic'>{icon(name, 22)}</div>"
+        f"<div class='t'>{esc(title)}</div><div class='m'>{esc(message)}</div></div>"
+    )
+# One uploaded document in the library.
+def document_card(filename: str, meta: str, topics: list[str]) -> str:
+    tags = "".join(f"<span>{esc(topic)}</span>" for topic in topics[:4])
+    return (
+        f"<div class='sa-doc'><span class='ic'>{icon('file', 20)}</span>"
+        f"<div><div class='n'>{esc(filename)}</div><div class='m'>{esc(meta)}</div></div></div>"
+        + (f"<div class='sa-doc-tags'>{tags}</div>" if tags else "")
+    )
+# A compact row for a recent document on the dashboard.
+def note_row(title: str, preview: str, when: str) -> str:
+    return (
+        f"<div class='sa-note'><span class='ic'>{icon('file', 16)}</span><div>"
+        f"<div class='t'>{esc(title)}</div><div class='p'>{esc(preview)}</div>"
+        f"<div class='w'>{esc(when)}</div></div></div>"
+    )
+# The review flashcard: which card this is, the concept, and what to do.
+def flashcard(position: int, total: int, concept: str, detail: str, prompt: str = "") -> str:
+    ask = f"<div class='prompt'>{esc(prompt)}</div>" if prompt else ""
+    return (
+        f"<div class='sa-flash'><div class='count'>{position} / {total} cards</div>"
+        f"<div class='c'>{esc(concept)}</div><div class='s'>{esc(detail)}</div>{ask}</div>"
     )
 # Progress stepper showing which study stages are done, active or still to come.
 def stepper(steps: list[tuple[str, str, str]]) -> str:
@@ -146,7 +248,7 @@ def recommendation_card(recommendation: dict[str, Any], passed: bool) -> str:
 def sidebar_header(model: str, passing_score: int, max_retries: int) -> str:
     return (
         "<div class='sa-side-head'>"
-        "<div class='t'>AI Study Assistant</div>"
+        "<div class='t'>Tutor settings</div>"
         f"<div class='sa-side-row'><span>Model</span><span>{esc(model)}</span></div>"
         f"<div class='sa-side-row'><span>Quiz passing score</span><span>{passing_score}%</span></div>"
         f"<div class='sa-side-row' style='border:none'><span>Maximum retries</span><span>{max_retries}</span></div>"

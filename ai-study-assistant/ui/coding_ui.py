@@ -6,7 +6,7 @@ from coding.runner import SandboxError, available_languages, isolation_notice
 from db import learning_service
 from learning.mastery import DIFFICULTIES
 from learning.misconceptions import CODE_FAILURE_LABELS
-from ui import cards
+from ui import cards, code_editor
 from utils.helpers import StudyAssistantError
 STATE_PROBLEM = "coding_problem_id"
 EDITOR_PREFIX = "coding_editor_"
@@ -17,7 +17,6 @@ STATE_QUEUE = "coding_queue"
 MAX_PROBLEMS = 5
 # The coding practice page.
 def render(user: Any) -> None:
-    st.header("Coding practice")
     level, message = isolation_notice()
     st.html(cards.sandbox_notice(level, message))
     languages = available_languages()
@@ -27,7 +26,11 @@ def render(user: Any) -> None:
     _render_generator(user, languages)
     problem = _current_problem(user)
     if problem is None:
-        _render_history(user)
+        if not _render_history(user):
+            st.html(cards.empty_state(
+                "code", "No problems yet",
+                "Pick a topic above and StudyFlow writes a problem, runs your code against its tests and grades it.",
+            ))
         return
     _render_problem(user, problem)
 # The form that asks for a new problem.
@@ -122,8 +125,13 @@ def _render_problem(user: Any, problem: Any) -> None:
         value=problems.starter_code(problem),
         height=320,
         key=f"{EDITOR_PREFIX}{problem.id}",
-        help="Write the function the problem asks for. Tab indents; the tests call your function directly.",
+        help=(
+            "Write the function the problem asks for; the tests call it directly. Enter keeps the "
+            "indentation (and indents after a colon), Tab and Shift+Tab indent or dedent. "
+            "Press Esc, then Tab, to leave the editor."
+        ),
     )
+    code_editor.enable()
     run, submit, hint, skip = st.columns(4)
     if run.button("Run", width="stretch"):
         _run(problem, code, record=False, user=user)
@@ -275,15 +283,15 @@ def _render_notes() -> None:
         f"Hints used: {len(notes)} of {feedback.MAX_LEVEL}. Hints reduce how much a solved "
         "problem raises your mastery."
     )
-# Problems this user has generated before.
-def _render_history(user: Any) -> None:
+# Problems this user has generated before. Returns whether there were any.
+def _render_history(user: Any) -> bool:
     try:
         history = problems.list_problems(user.user_id, 10)
     except StudyAssistantError:
-        return
+        return False
     if not history:
-        return
-    with st.expander("Your problems"):
+        return False
+    with st.expander("Your problems", expanded=_current_problem(user) is None):
         for problem in history:
             columns = st.columns([5, 1], vertical_alignment="center")
             columns[0].caption(f"**{problem.title}** · {problem.difficulty} · {problem.language}")
@@ -291,3 +299,4 @@ def _render_history(user: Any) -> None:
                 st.session_state[STATE_QUEUE] = []
                 _open_problem(problem)
                 st.rerun()
+    return True

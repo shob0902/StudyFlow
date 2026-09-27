@@ -32,7 +32,8 @@ USER_SCOPED_KEYS = [
     "history_limit",
     # The platform sections keep their own working state; all of it belongs to one user.
     "section",
-    "section_nav",
+    "sa_search",
+    "sa_search_clear",
     "pending_section",
     "doc_quiz",
     "coding_prefill",

@@ -1,7 +1,11 @@
-# Streamlit theme: green nature palette used across the whole app.
+# Streamlit theme: the StudyFlow violet palette. ui/theme.py layers the full design system on top.
 [theme]
-primaryColor = "#4A7023"
-backgroundColor = "#F4F9F1"
-secondaryBackgroundColor = "#FFFFFF"
-textColor = "#2D5016"
+primaryColor = "#6D4AFF"
+backgroundColor = "#EEF0F8"
+secondaryBackgroundColor = "#E6E8F3"
+textColor = "#17152B"
 font = "sans serif"
+
+[client]
+# Hide the Deploy button and developer menu for end users.
+toolbarMode = "minimal"

@@ -5,6 +5,11 @@ from pathlib import Path
 import pytest
 AppTest = pytest.importorskip("streamlit.testing.v1").AppTest
 APP_FILE = str(Path(__file__).resolve().parents[1] / "app.py")
+# Move to a section by clicking its sidebar navigation button.
+def _nav(app, section):
+    from ui.shell import nav_key
+    next(button for button in app.button if button.key == nav_key(section)).click().run()
+    return app
 # A signed-in user with the given plans already made, newest last.
 def _app_with_plans(monkeypatch, db_file, subjects=("DSA",), topics=("Recursion", "Graphs")):
     from auth.google_oauth import GoogleProfile
@@ -28,12 +33,15 @@ def _app_with_plans(monkeypatch, db_file, subjects=("DSA",), topics=("Recursion"
     app.session_state["auth_session_id"] = session_store().create(user).session_id
     app.run()
     return app, user, made
+# All the HTML the page rendered.
+def _html(app) -> str:
+    return " ".join(element.value for element in app.get("html"))
 # Find a widget by key.
 def _widget(collection, key):
     return next((widget for widget in collection if widget.key == key), None)
 # Move to a section.
 def _go(app, section):
-    app.segmented_control[0].set_value(section).run()
+    _nav(app, section)
     return app
 # --- landing ------------------------------------------------------------
 # Signing in opens the dashboard, not the tutor.
@@ -41,7 +49,7 @@ def test_the_app_opens_on_the_dashboard(monkeypatch, db_file):
     app, _user, _made = _app_with_plans(monkeypatch, db_file)
     assert not app.exception
     assert app.session_state["section"] == "Dashboard"
-    assert any("Welcome back" in header.value for header in app.header)
+    assert "Welcome back, Ada" in _html(app)
 # --- plan history -------------------------------------------------------
 # Only the newest plan is active; the rest stay in the history.
 def test_only_one_plan_is_active(monkeypatch, db_file):
@@ -112,7 +120,7 @@ def test_dashboard_shows_the_current_plan_item(monkeypatch, db_file):
     first = next(item for item in plan.items if item.status != "done")
     html = " ".join(element.value for element in app.get("html"))
     captions = " ".join(caption.value for caption in app.caption)
-    assert any("Your plan: DSA" in sub.value for sub in app.subheader)
+    assert "Your plan: DSA" in html
     assert "Week 1 of" in captions
     assert first.concept_name in html
     assert any(f"Learn {first.concept_name}" == button.label for button in app.button)
@@ -123,7 +131,7 @@ def test_dashboard_links_to_the_full_plan(monkeypatch, db_file):
     opener.click().run()
     assert not app.exception
     assert app.session_state["section"] == "Study Plan"
-    assert any("Study plan" in header.value for header in app.header)
+    assert "<h1 class='sa-page-title'>Study Planner</h1>" in _html(app)
 # Finishing everything is reported rather than showing an empty block.
 def test_dashboard_when_the_plan_is_finished(monkeypatch, db_file):
     from db import plan_service

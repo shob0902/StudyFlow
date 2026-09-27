@@ -19,7 +19,6 @@ GRADES = [
 ]
 # Today's review page.
 def render_review(user: Any) -> None:
-    st.header("Today's review")
     if st.session_state.get(REVIEW_QUEUE):
         _render_session(user)
         return
@@ -36,26 +35,33 @@ def render_review(user: Any) -> None:
         st.session_state[REVIEW_DONE] = []
     if not due:
         upcoming = review_service.upcoming(user.user_id, 7)
-        st.info("Nothing is due right now.")
+        st.html(cards.empty_state(
+            "repeat", "You're all caught up",
+            "Nothing is due right now. Concepts come back here just as they start to fade.",
+        ))
         if upcoming:
-            st.caption("Coming up this week:")
-            for card in upcoming[:8]:
-                st.html(cards.due_row(card["mark"], card["concept_name"], f"{card['mastery']:.0f}%"))
+            with st.container(key="sa_panel_upcoming"):
+                st.html(cards.section_head("Coming up this week"))
+                st.html("".join(
+                    cards.due_row(card["mark"], card["concept_name"], f"{card['mastery']:.0f}%")
+                    for card in upcoming[:8]
+                ))
         return
-    st.caption(f"{len(due)} concept{'s' if len(due) != 1 else ''} due")
-    for card in due:
-        detail = f"{card['mastery']:.0f}%"
-        if card["overdue_days"] > 0:
-            detail += f" · {card['overdue_days']:.0f} days overdue"
-        st.html(cards.due_row(card["mark"], card["concept_name"], detail))
-        if card["mistakes"]:
-            st.caption("Last time: " + card["mistakes"][0])
-    if st.button("Start review session", type="primary", width="stretch"):
-        st.session_state[REVIEW_QUEUE] = due
-        st.session_state[REVIEW_INDEX] = 0
-        st.session_state[REVIEW_SHOWN] = False
-        st.session_state[REVIEW_DONE] = []
-        st.rerun()
+    with st.container(key="sa_panel_review_queue"):
+        st.html(cards.section_head("Due today", f"{len(due)} concept{'s' if len(due) != 1 else ''}"))
+        for card in due:
+            detail = f"{card['mastery']:.0f}%"
+            if card["overdue_days"] > 0:
+                detail += f" · {card['overdue_days']:.0f} days overdue"
+            st.html(cards.due_row(card["mark"], card["concept_name"], detail))
+            if card["mistakes"]:
+                st.caption("Last time: " + card["mistakes"][0])
+        if st.button("Start review session", type="primary", icon=":material/play_arrow:", width="stretch"):
+            st.session_state[REVIEW_QUEUE] = due
+            st.session_state[REVIEW_INDEX] = 0
+            st.session_state[REVIEW_SHOWN] = False
+            st.session_state[REVIEW_DONE] = []
+            st.rerun()
 # One card at a time: recall it, then grade yourself.
 def _render_session(user: Any) -> None:
     queue = st.session_state[REVIEW_QUEUE]
@@ -65,12 +71,14 @@ def _render_session(user: Any) -> None:
         st.rerun()
         return
     card = queue[index]
-    st.caption(f"Card {index + 1} of {len(queue)}")
-    st.progress((index) / len(queue))
-    st.subheader(card["concept_name"])
-    st.caption(f"{card['subject']} · currently {card['mastery']:.0f}%")
-    if not st.session_state.get(REVIEW_SHOWN):
-        st.info("Recall everything you can about this, out loud or on paper. Then reveal.")
+    st.progress(index / len(queue), text=f"Card {index + 1} of {len(queue)}")
+    shown = st.session_state.get(REVIEW_SHOWN)
+    st.html(cards.flashcard(
+        index + 1, len(queue), card["concept_name"],
+        f"{card['subject']} · currently {card['mastery']:.0f}% mastery",
+        "" if shown else "Recall everything you can about this, out loud or on paper. Then reveal.",
+    ))
+    if not shown:
         if st.button("I've tried — show me", type="primary", width="stretch"):
             st.session_state[REVIEW_SHOWN] = True
             st.rerun()
@@ -78,10 +86,12 @@ def _render_session(user: Any) -> None:
     if card["mistakes"]:
         st.warning("What caught you out before: " + "; ".join(card["mistakes"]))
     st.caption("How well did you recall it?")
-    columns = st.columns(len(GRADES))
-    for column, (label, quality) in zip(columns, GRADES):
-        if column.button(label, key=f"grade_{index}_{label}", width="stretch"):
-            _grade(user, card, quality)
+    with st.container(key="sa_grades"):
+        columns = st.columns(len(GRADES))
+        for column, (label, quality) in zip(columns, GRADES):
+            if column.button(label, key=f"grade_{index}_{label}", width="stretch",
+                             type="primary" if label == "Got it" else "secondary"):
+                _grade(user, card, quality)
     if st.button("End session", width="stretch"):
         st.session_state[REVIEW_QUEUE] = []
         st.rerun()
@@ -102,7 +112,6 @@ def _grade(user: Any, card: dict[str, Any], quality: float) -> None:
     st.rerun()
 # The study plan page.
 def render_plan(user: Any, on_learn: Any = None) -> None:
-    st.header("Study plan")
     try:
         found = plan_service.active_plan(user.user_id)
     except StudyAssistantError as error:
@@ -114,7 +123,7 @@ def render_plan(user: Any, on_learn: Any = None) -> None:
         return
     plan_id, plan = found
     summary = plan_service.plan_summary(plan)
-    st.subheader(plan.subject)
+    st.html(cards.section_head(plan.subject, "Active plan"))
     st.html(
         cards.metrics(
             [
@@ -143,9 +152,11 @@ def render_plan(user: Any, on_learn: Any = None) -> None:
     today = date.today()
     for week, items in plan.by_week():
         start = today + timedelta(days=7 * (week - 1))
-        st.markdown(f"**Week {week}** — from {start.strftime('%d %b')}")
-        for item in items:
-            _render_item(user, plan_id, item, on_learn)
+        with st.container(key=f"sa_panel_week_{week}"):
+            done = sum(1 for item in items if item.status == "done")
+            st.html(cards.section_head(f"Week {week}", f"from {start.strftime('%d %b')} · {done}/{len(items)} done"))
+            for item in items:
+                _render_item(user, plan_id, item, on_learn)
     _render_history(user)
 # Every plan this user has made, with the active one marked.
 #
@@ -215,6 +226,7 @@ def _render_item(user: Any, plan_id: str, item: Any, on_learn: Any = None) -> No
             st.rerun()
 # The form that creates a plan.
 def _render_goal_form(user: Any) -> None:
+    st.html(cards.section_head("Create a study plan"))
     st.caption("Tell the planner what you are working towards. It weights the plan by what you already know.")
     with st.form("study_goal"):
         subject = st.text_input("Subject", placeholder="Machine Learning")

@@ -1,8 +1,13 @@
-# Study material attached from inside Learn: picking a document, being quizzed on it, isolation.
+# Study material: the attach control in Learn, the Documents page, being quizzed on a document, isolation.
 from pathlib import Path
 import pytest
 AppTest = pytest.importorskip("streamlit.testing.v1").AppTest
 APP_FILE = str(Path(__file__).resolve().parents[1] / "app.py")
+# Move to a section by clicking its sidebar navigation button.
+def _nav(app, section):
+    from ui.shell import nav_key
+    next(button for button in app.button if button.key == nav_key(section)).click().run()
+    return app
 NOTES = b"""# Dynamic Programming
 
 Dynamic programming solves problems with overlapping subproblems by storing results.
@@ -26,7 +31,7 @@ def _learn_app(monkeypatch, db_file, filenames=("dp.md",), google_id="google-1")
     app.session_state["auth_session_id"] = session_store().create(user).session_id
     app.run()
     # The app opens on the dashboard, and study material lives in Learn.
-    app.segmented_control[0].set_value("Learn").run()
+    _nav(app, "Learn")
     return app, user, documents
 # Find a widget by key.
 def _widget(collection, key):
@@ -47,16 +52,30 @@ def _fake_questions():
             "explanation": "Tabulation works bottom up.",
         },
     ]
-# There is no separate documents page any more.
-def test_documents_section_is_gone(monkeypatch, db_file):
+# Every section has a sidebar button, including the Documents library.
+def test_every_section_is_in_the_sidebar(monkeypatch, db_file):
+    from ui.shell import SECTIONS, nav_key
     app, _user, _documents = _learn_app(monkeypatch, db_file)
     assert not app.exception
-    options = list(app.segmented_control[0].options)
-    assert "My Documents" not in options
-    assert options == [
-        "Dashboard", "Learn", "Knowledge", "Coding Practice",
-        "Today's Review", "Study Plan", "Analytics",
+    keys = {button.key for button in app.button}
+    assert all(nav_key(section) in keys for section in SECTIONS)
+    assert SECTIONS == [
+        "Dashboard", "Learn", "Today's Review", "Coding Practice",
+        "Documents", "Study Plan", "Knowledge", "Analytics",
     ]
+# The Documents page lists uploads as cards and opens the chosen one's tools.
+def test_documents_page_lists_uploads(monkeypatch, db_file):
+    app, _user, documents = _learn_app(monkeypatch, db_file, ("dp.md", "trees.md"))
+    _nav(app, "Documents")
+    assert not app.exception
+    assert app.session_state["section"] == "Documents"
+    keys = {button.key for button in app.button}
+    assert {f"docopen_{document.id}" for document in documents} <= keys
+    other = next(d for d in documents if d.id != app.session_state["attached_document_id"])
+    _widget(app.button, f"docopen_{other.id}").click().run()
+    assert not app.exception
+    assert app.session_state["attached_document_id"] == other.id
+    assert _widget(app.button, f"docopen_{other.id}").disabled
 # The attach control lives in Learn and lists what has been uploaded.
 def test_attach_control_is_in_learn(monkeypatch, db_file):
     app, _user, _documents = _learn_app(monkeypatch, db_file)

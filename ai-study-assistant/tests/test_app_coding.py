@@ -3,6 +3,11 @@ from pathlib import Path
 import pytest
 AppTest = pytest.importorskip("streamlit.testing.v1").AppTest
 APP_FILE = str(Path(__file__).resolve().parents[1] / "app.py")
+# Move to a section by clicking its sidebar navigation button.
+def _nav(app, section):
+    from ui.shell import nav_key
+    next(button for button in app.button if button.key == nav_key(section)).click().run()
+    return app
 GOOD_CODE = "def solve(n):\n    return n * 2\n"
 # A signed-in user on the coding page, with the given problems already stored and queued.
 def _coding_app(monkeypatch, db_file, titles=("First", "Second", "Third")):
@@ -33,7 +38,7 @@ def _coding_app(monkeypatch, db_file, titles=("First", "Second", "Third")):
     app = AppTest.from_file(APP_FILE, default_timeout=120)
     app.session_state["auth_session_id"] = session_store().create(user).session_id
     app.run()
-    app.segmented_control[0].set_value("Coding Practice").run()
+    _nav(app, "Coding Practice")
     return app, user, stored
 # Put a set in the editor the way generating one does.
 def _open_set(app, stored):

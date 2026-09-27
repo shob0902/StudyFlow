@@ -4,12 +4,12 @@ import streamlit as st
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 from auth.errors import UnauthorizedError
-from auth.streamlit_auth import learning_data, render_user_panel, require_login
+from auth.streamlit_auth import AVATAR_KEY, learning_data, render_user_panel, require_login
 from auth.user_context import UserContext, new_thread_id, require_thread_owner
-from db.learning_service import record_attempts, record_mistake
+from db.learning_service import mastery_for_user, record_attempts, record_mistake
 from learning.mastery import ACTIVITY_DOCUMENT, Attempt
 from learning.misconceptions import classify_attempt
-from rag.store import get_document
+from rag.store import get_document, list_documents
 from db.service import (
     SIDEBAR_PAGE_SIZE,
     delete_session,
@@ -31,14 +31,18 @@ from graph.workflow import (
     get_mermaid_diagram,
 )
 from llm.model import MODEL, NODE_API_KEYS, missing_api_keys
-from ui import cards, coding_ui, documents_ui, history, knowledge_ui, study_ui
+from ui import cards, coding_ui, documents_ui, history, knowledge_ui, shell, study_ui
 from ui.auth_ui import learning_summary as learning_summary_card
+from ui.shell import SECTIONS
 from ui.theme import inject_styles
 from ui.three_scenes import END_NODE, embed, hero_scene, rocket_scene, score_scene, thinking_scene, workflow_scene
 from utils.helpers import StudyAssistantError, grade_quiz, log_error, log_step
 MAX_TOPIC_LENGTH = 300
 SUGGESTED_TOPICS = ["What is an embedding?", "How does photosynthesis work?", "What is recursion?"]
-st.set_page_config(page_title="AI Study Assistant", layout="centered")
+st.set_page_config(
+    page_title="StudyFlow · AI Study Assistant", page_icon=":material/school:",
+    layout="wide", initial_sidebar_state="expanded",
+)
 # Build the compiled graph once per server process.
 @st.cache_resource
 def get_graph() -> CompiledStateGraph:
@@ -253,7 +257,8 @@ def current_workflow_node() -> str | None:
 # Draw the session history: a New session button, then this user's sessions grouped by date.
 # Only one page of sessions is fetched, and a session's transcript is loaded only when opened.
 def render_history(user: UserContext) -> None:
-    if st.button("New session", key="new_session", type="primary", width="stretch"):
+    st.html("<div class='sa-nav-label'>Study sessions</div>")
+    if st.button("New session", key="new_session", type="primary", icon=":material/add:", width="stretch"):
         new_session()
         st.rerun()
     try:
@@ -263,7 +268,6 @@ def render_history(user: UserContext) -> None:
     except StudyAssistantError as error:
         st.warning(f"Could not load your history. {error}")
         return
-    st.markdown("###### History")
     if not records:
         st.html(history.empty_state())
         return
@@ -304,39 +308,46 @@ def render_history_item(record: Any) -> None:
                 else:
                     delete_current(record)
         st.html(history.item_meta(record))
-# Draw the sidebar with settings, API key mapping and session details.
+# Draw the rest of the sidebar under the navigation: session history, the open session's
+# details, the tutor's settings and debugging views, then the signed-in user and Logout.
 def render_sidebar() -> None:
     with st.sidebar:
         user = current_user()
-        render_user_panel(user)
-        st.html(cards.sidebar_header(MODEL, PASSING_SCORE, MAX_RETRIES))
-        render_history(user)
+        with st.container(key="sa_sidebar_history"):
+            render_history(user)
+        state = st.session_state.study_state
+        if state:
+            st.html("<div class='sa-nav-label'>Current session</div>")
+            title = state.get("topic_analysis", {}).get("clean_topic") or state.get("topic", "")
+            rows = [
+                ("Topic", title),
+                ("Quiz attempts", str(len(state.get("attempts", [])))),
+                ("Retries used", f"{state.get('retry_count', 0)}/{MAX_RETRIES}"),
+                ("Status", session_status()),
+            ]
+            if state.get("attempts"):
+                rows.insert(3, ("Latest score", f"{state.get('score', 0):.0f}%"))
+            st.html(cards.sidebar_session(rows))
+            if st.button("Reset session", icon=":material/restart_alt:", width="stretch"):
+                reset_session()
+                st.rerun()
+        with st.expander("Tutor details", icon=":material/tune:"):
+            st.html(cards.sidebar_header(MODEL, PASSING_SCORE, MAX_RETRIES))
+            keys_tab, log_tab, state_tab = st.tabs(["API keys", "Log", "State"])
+            with keys_tab:
+                st.code("\n".join(f"{node:<22} {key}" for node, key in NODE_API_KEYS.items()))
+                st.caption("wait_for_answers doesn't call Groq, so it needs no key.")
+            with log_tab:
+                st.code("\n".join(f"→ {step}" for step in st.session_state.execution_log) or "(empty)")
+            with state_tab:
+                if state:
+                    st.json(state_for_display(state), expanded=False)
+                else:
+                    st.caption("No session is open.")
+        st.html("<div class='sa-nav-label'>Account</div>")
         data = learning_data(user)
         st.html(learning_summary_card(data.get("summary", {})))
-        with st.expander("API key per node"):
-            st.code("\n".join(f"{node:<22} {key}" for node, key in NODE_API_KEYS.items()))
-            st.caption("wait_for_answers doesn't call Groq, so it needs no key.")
-        state = st.session_state.study_state
-        if not state:
-            return
-        st.subheader("Current session")
-        title = state.get("topic_analysis", {}).get("clean_topic") or state.get("topic", "")
-        rows = [
-            ("Topic", title),
-            ("Quiz attempts", str(len(state.get("attempts", [])))),
-            ("Retries used", f"{state.get('retry_count', 0)}/{MAX_RETRIES}"),
-            ("Status", session_status()),
-        ]
-        if state.get("attempts"):
-            rows.insert(3, ("Latest score", f"{state.get('score', 0):.0f}%"))
-        st.html(cards.sidebar_session(rows))
-        with st.expander("Graph execution log"):
-            st.code("\n".join(f"→ {step}" for step in st.session_state.execution_log) or "(empty)")
-        with st.expander("Raw graph state"):
-            st.json(state_for_display(state), expanded=False)
-        if st.button("Reset session", width="stretch"):
-            reset_session()
-            st.rerun()
+        render_user_panel(user)
 # Copy the state with correct answers hidden while a quiz is open.
 def state_for_display(state: dict[str, Any]) -> dict[str, Any]:
     display = dict(state)
@@ -464,7 +475,7 @@ def render_graph_section() -> None:
         with map_tab:
             visited = {step for step in st.session_state.execution_log if step in NODE_LABELS}
             embed(workflow_scene(visited, current_workflow_node()), 400)
-            st.caption("Green nodes already ran in this session, the glowing amber node is where the graph is now.")
+            st.caption("Violet nodes already ran in this session, the glowing amber node is where the graph is now.")
         with text_tab:
             st.code(TEXT_DIAGRAM, language=None)
         with mermaid_tab:
@@ -483,46 +494,46 @@ def render_graph_section() -> None:
                     )
             if st.session_state.graph_png:
                 st.image(st.session_state.graph_png)
-# Build the page: styles, sidebar, hero, API key check, topic form, session and graph view.
-# The sections of the app. Learn is the original tutor flow, untouched; the rest are the
+# The sections of the app (see ui/shell.py). Learn is the original tutor flow; the rest are the
 # platform views built on the same mastery engine.
-NAV_KEY = "section_nav"
 PENDING_NAV = "pending_section"
-SECTIONS = [
-    "Dashboard",
-    "Learn",
-    "Knowledge",
-    "Coding Practice",
-    "Today's Review",
-    "Study Plan",
-    "Analytics",
-]
 # Ask for a different section on the next run.
 #
-# The request is parked rather than written to the nav widget directly: these calls come from
-# buttons inside a section, which render after the nav, and Streamlit refuses to let a widget's
-# value be changed once it exists in the same run.
+# The request is parked and applied before the navigation is drawn, so the sidebar highlights
+# the section that is actually shown.
 def go_to(section: str) -> None:
     st.session_state[PENDING_NAV] = section
     st.rerun()
-# The section selector: a centred bar across the top of the page rather than a sidebar list.
+# The sidebar navigation. A click reruns straight away so the highlight moves with the page.
 def render_nav() -> None:
     pending = st.session_state.pop(PENDING_NAV, None)
     if pending in SECTIONS:
         st.session_state.section = pending
-        # Dropping the widget's stored value before it is created lets `default` take effect.
-        st.session_state.pop(NAV_KEY, None)
-    with st.container(key="sa_nav"):
-        chosen = st.segmented_control(
-            "Go to",
-            SECTIONS,
-            default=st.session_state.section,
-            key=NAV_KEY,
-            label_visibility="collapsed",
-        )
-    # Clicking the active segment deselects it; stay where we are rather than blanking the page.
-    if chosen:
+    with st.sidebar:
+        chosen = shell.render_nav(st.session_state.section)
+    if chosen and chosen != st.session_state.section:
         st.session_state.section = chosen
+        st.rerun()
+# The top header, and the search results under it while something is typed.
+def render_header(user: UserContext) -> None:
+    query = shell.render_header(
+        st.session_state.section, user.name or user.email, str(st.session_state.get(AVATAR_KEY, ""))
+    )
+    if not query:
+        return
+    shell.render_search_results(
+        query,
+        sessions=lambda: list_sessions(user.user_id, limit=50),
+        documents=lambda: list_documents(user.user_id),
+        concepts=lambda: mastery_for_user(user.user_id),
+        on_open_session=open_session,
+        on_open_document=open_document,
+        on_learn=learn_topic,
+    )
+# Open one of the user's documents on the Documents page.
+def open_document(document: Any) -> None:
+    st.session_state.attached_document_id = document.id
+    go_to("Documents")
 # Start learning a topic from anywhere in the app.
 def learn_topic(topic: str) -> None:
     st.session_state[PENDING_NAV] = "Learn"
@@ -584,9 +595,9 @@ def render_document_quiz() -> None:
                 _grade_document_quiz(user, quiz, answers)
     else:
         _render_document_results(graded)
-    if st.button("Back to my documents", width="stretch"):
+    if st.button("Back to my documents", icon=":material/arrow_back:", width="stretch"):
         st.session_state.doc_quiz = None
-        go_to("Learn")
+        go_to("Documents")
 # Grade a document quiz and push the result into the mastery engine.
 def _grade_document_quiz(user: UserContext, quiz: dict[str, Any], answers: list[str]) -> None:
     results, correct_count, score = grade_quiz(quiz["questions"], answers)
@@ -653,9 +664,15 @@ def render_learn() -> None:
         render_document_quiz()
         return
     documents_ui.render_attach(current_user(), on_quiz=start_document_quiz)
-    with st.form("topic_form"):
-        topic = st.text_input("What do you want to learn?", placeholder="What is an embedding?")
-        start_clicked = st.form_submit_button("Start Learning", type="primary", width="stretch")
+    with st.container(key="sa_composer"):
+        with st.form("topic_form"):
+            topic = st.text_input(
+                "What do you want to learn?",
+                placeholder="Ask StudyFlow to teach you anything, e.g. What is an embedding?",
+            )
+            start_clicked = st.form_submit_button(
+                "Start Learning", type="primary", icon=":material/auto_awesome:", width="stretch"
+            )
     if start_clicked:
         if not topic.strip():
             st.warning("Please enter a topic first.")
@@ -684,6 +701,7 @@ def main() -> None:
     user = current_user()
     render_nav()
     render_sidebar()
+    render_header(user)
     section = st.session_state.section
     if section == "Dashboard":
         knowledge_ui.render_dashboard(
@@ -692,7 +710,12 @@ def main() -> None:
             on_practice=practise_concept,
             on_learn=learn_topic,
             on_plan=lambda: go_to("Study Plan"),
+            on_tutor=lambda: go_to("Learn"),
+            on_documents=lambda: go_to("Documents"),
+            on_open_session=open_session,
         )
+    elif section == "Documents":
+        documents_ui.render_library(user, on_quiz=start_document_quiz)
     elif section == "Knowledge":
         knowledge_ui.render_knowledge(user, on_practice=practise_concept)
     elif section == "Coding Practice":

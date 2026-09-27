@@ -1,13 +1,13 @@
 # Login screen and signed-in user badge. Renders identity only, never tokens.
 from auth.config import CLIENT_ID_VAR, CLIENT_SECRET_VAR, REDIRECT_URI_VAR
 from auth.user_context import UserContext
-from ui.cards import esc
+from ui.cards import brand, esc
 # Landing page shown to visitors who are not signed in yet.
 def login_page(auth_url: str) -> str:
     return (
         "<div class='sa-login'>"
-        "<span class='sa-badge'>LANGCHAIN · LANGGRAPH · GROQ</span>"
-        "<div class='sa-title'>Study Assistant</div>"
+        f"{brand()}"
+        "<div class='sa-title'>Learn anything, faster.</div>"
         "<p class='tag'>Your personalized AI learning companion.</p>"
         "<div class='panel'>"
         f"<a class='sa-google-btn' href='{esc(auth_url)}' target='_self' rel='noopener'>"
@@ -26,8 +26,9 @@ def login_setup_needed(missing: list[str]) -> str:
     variables = ", ".join(missing) or CLIENT_ID_VAR
     return (
         "<div class='sa-login'>"
+        f"{brand()}"
         "<span class='sa-badge'>SETUP NEEDED</span>"
-        "<div class='sa-title'>Study Assistant</div>"
+        "<div class='sa-title'>StudyFlow</div>"
         "<p class='tag'>Your personalized AI learning companion.</p>"
         "<div class='panel' style='text-align:left'>"
         "<h4 style='margin:.2rem 0 .6rem;color:var(--primary)'>Google sign-in is not configured</h4>"
@@ -64,7 +65,7 @@ def learning_summary(summary: dict) -> str:
         ("Quiz attempts", str(summary.get("quiz_attempts", 0))),
         ("Average score", f"{average:.0f}%" if average is not None else "—"),
     ]
-    return "<div class='sa-card' style='padding:.7rem 1rem;margin-top:.6rem'>" + "".join(
+    return "<div class='sa-card' style='padding:.7rem 1rem;margin:.2rem 0 .6rem'>" + "".join(
         f"<div class='sa-side-row'><span>{esc(label)}</span><span>{esc(value)}</span></div>"
         for label, value in rows
     ) + "</div>"

@@ -1,15 +1,14 @@
-# Study material attached from inside the Learn section.
+# Study material: the attach popover next to the tutor's topic box, and the Documents page.
 #
-# There is no separate documents page: a document is something you bring to a study session, so
-# the whole flow — add it, let the tutor read it, get quizzed on it — lives behind one button
-# next to the topic box.
+# Both are the same flow (add it, let the tutor read it, ask about it, get quizzed on it); the
+# popover keeps it one click away while studying, the page lays the library out in full.
 from typing import Any
 import streamlit as st
 from db import learning_service
 from rag import store
 from rag.extract import DocumentError
 from rag.tutor import STYLES, answer_question, extract_concepts, quiz_from_document
-from ui import cards
+from ui import cards, history
 from utils.helpers import StudyAssistantError, log_error
 SELECTED = "attached_document_id"
 ASK_STYLES = {
@@ -66,6 +65,57 @@ def _render_panel(user: Any, documents: list[Any], on_quiz: Any) -> None:
     st.divider()
     _render_ask(user, document)
     st.divider()
+    _render_delete(user, document)
+# The documents page: an upload area, the library as cards, and the chosen document's tools.
+# It is the same flow as the attach popover in the tutor, laid out as a full page.
+def render_library(user: Any, on_quiz: Any = None) -> None:
+    try:
+        documents = store.list_documents(user.user_id)
+    except StudyAssistantError as error:
+        st.warning(f"Could not read your documents. {error}")
+        return
+    with st.container(key="sa_panel_upload"):
+        st.html(cards.section_head("Upload study material", "PDF, DOCX, TXT or Markdown · up to 20 MB"))
+        _render_upload(user)
+    if not documents:
+        st.html(cards.empty_state(
+            "file", "No documents yet",
+            "Upload notes, slides or a textbook chapter. Answers and quizzes then come only from your material.",
+        ))
+        return
+    selected = _selected(user, documents) or documents[0]
+    st.html(cards.section_head("Your documents", f"{len(documents)} file{'s' if len(documents) != 1 else ''}"))
+    for row in range(0, len(documents), 3):
+        columns = st.columns(3)
+        for column, document in zip(columns, documents[row:row + 3]):
+            is_selected = document.id == selected.id
+            key = f"sa_doc_sel_{document.id}" if is_selected else f"sa_doc_{document.id}"
+            with column, st.container(key=key):
+                pages = f"{document.pages} pages · " if document.pages else ""
+                st.html(cards.document_card(
+                    document.filename,
+                    f"{pages}{document.chunk_count} passages · added {history.relative_time(document.created_at)}",
+                    [slug.split("::")[-1].replace("_", " ") for slug in document.concepts],
+                ))
+                if st.button(
+                    "Selected" if is_selected else "Open", key=f"docopen_{document.id}", width="stretch",
+                    type="primary" if is_selected else "secondary", disabled=is_selected,
+                    icon=":material/check:" if is_selected else ":material/open_in_new:",
+                ):
+                    st.session_state[SELECTED] = document.id
+                    st.rerun()
+    st.session_state[SELECTED] = selected.id
+    with st.container(key="sa_panel_doc_tools"):
+        st.html(cards.section_head(selected.filename, "Ask, summarise or get quizzed"))
+        ask_tab, quiz_tab, manage_tab = st.tabs(["Ask & summarise", "Quiz me", "Manage"])
+        with ask_tab:
+            _render_ask(user, selected)
+        with quiz_tab:
+            _render_quiz_controls(user, selected, on_quiz)
+        with manage_tab:
+            _render_delete(user, selected)
+# Delete a document, behind a confirmation tick.
+def _render_delete(user: Any, document: Any) -> None:
     confirm = st.checkbox("Yes, delete it", key=f"docconfirm_{document.id}")
     if st.button("Delete this document", key=f"docdel_{document.id}", width="stretch"):
         if not confirm:

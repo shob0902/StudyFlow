@@ -121,6 +121,10 @@ def mistakes_for_concept(user_id: str, concept_slug: str, limit: int = 5) -> lis
 def recent_mistakes(user_id: str, limit: int = 10) -> list[dict[str, Any]]:
     with session() as connection:
         return MistakeRepository(connection).recent(user_id, limit)
+# This user's most recent learning events, newest first, for the activity timeline and charts.
+def recent_events(user_id: str, limit: int = 100) -> list[dict[str, Any]]:
+    with session() as connection:
+        return EventRepository(connection).recent(user_id, limit)
 # Record something that is not an attempt, such as uploading a document or finishing a plan item.
 def record_event(user_id: str, kind: str, **fields: Any) -> None:
     with session() as connection:
